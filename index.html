@@ -30,7 +30,22 @@
   label.chk input { width:16px; height:16px; accent-color:var(--accent); }
   h3 { margin:0; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
   .list { overflow-y:auto; padding:4px 12px 12px; }
-  #results { flex:1.3; min-height:0; }
+  [hidden] { display:none !important; }
+  #leftPanel { flex:1.3; min-height:0; display:flex; flex-direction:column; }
+  #results { flex:1; min-height:0; }
+  #rekBox { flex:1; min-height:0; display:flex; flex-direction:column; }
+  .tabs { display:flex; border-bottom:1px solid var(--line); flex-shrink:0; }
+  .tab { flex:1; background:none; border-radius:0; padding:10px; color:var(--muted); border-bottom:2px solid transparent; }
+  .tab.on { color:var(--text); border-bottom-color:var(--accent); }
+  .chiprow { display:flex; gap:6px; overflow-x:auto; padding:10px 12px 6px; flex-shrink:0; scrollbar-width:thin; }
+  .chip { white-space:nowrap; padding:6px 12px; border-radius:999px; font-size:13px; flex-shrink:0; }
+  .chip.on { background:var(--accent); color:#fff; }
+  .song { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #20242d; cursor:pointer; }
+  .song:hover .st { color:var(--accent); }
+  .song .st { flex:1; min-width:0; font-size:14px; }
+  .song .sa { font-size:12px; color:var(--muted); }
+  .song .go { color:var(--muted); font-size:12px; white-space:nowrap; }
+  .rekhead { display:flex; justify-content:space-between; align-items:center; padding:6px 0; color:var(--muted); font-size:12px; }
   #queueBox { flex:1; min-height:0; display:flex; flex-direction:column; border-top:1px solid var(--line); }
   .item { display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid #20242d; }
   .item img { width:96px; height:54px; object-fit:cover; border-radius:6px; flex-shrink:0; background:#000; }
@@ -46,7 +61,9 @@
   /* ---------- HP / layar sempit: video di atas, panel di bawah ---------- */
   @media (max-width: 900px) {
     body { height:100dvh; }
-    .app { grid-template-columns:1fr; grid-template-rows:auto 1fr; height:100dvh; }
+    .app { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); height:100dvh; }
+    aside { min-width:0; }
+    #leftPanel { flex:2; }
     .stage { flex:none; }
     #playerWrap { flex:none; width:100%; aspect-ratio:16/9; }
     #idle { font-size:15px; }
@@ -68,7 +85,7 @@
   <div class="stage">
     <div id="playerWrap">
       <div id="player"></div>
-      <div id="idle">Cari lagu di panel kanan, lalu klik <b>&nbsp;+ Antri&nbsp;</b> untuk mulai 🎤</div>
+      <div id="idle"><span>Cari lagu atau pilih dari ⭐ Rekomendasi, lalu klik <b>+ Antri</b> untuk mulai 🎤</span></div>
     </div>
     <div class="nowbar">
       <div class="t"><div class="lbl">Sedang diputar</div><div id="nowTitle">—</div></div>
@@ -89,7 +106,17 @@
         <label class="chk"><input type="checkbox" id="addFemale"> female key</label>
       </div>
     </div>
-    <div id="results" class="list"><div class="msg">Hasil pencarian muncul di sini.</div></div>
+    <div id="leftPanel">
+      <div class="tabs">
+        <button class="tab on" data-tab="hasil">🔍 Hasil</button>
+        <button class="tab" data-tab="rek">⭐ Rekomendasi</button>
+      </div>
+      <div id="results" class="list"><div class="msg">Hasil pencarian muncul di sini.</div></div>
+      <div id="rekBox" hidden>
+        <div class="chiprow" id="chips"></div>
+        <div id="rekList" class="list"></div>
+      </div>
+    </div>
     <div id="queueBox">
       <div class="sec" style="border-bottom:0;padding-bottom:4px">
         <h3><span>Antrian (<span id="qCount">0</span>)</span><button id="btnClear" style="font-size:11px;padding:4px 8px">Kosongkan</button></h3>
@@ -157,6 +184,19 @@ function playNext() {
   $('idle').style.display = 'none';
   $('nowTitle').textContent = current.title;
   player.loadVideoById(current.id);
+  recordHistory(current);
+}
+
+// ---------- riwayat (untuk Sering & Terakhir) ----------
+function recordHistory(v) {
+  const h = store.get('history', {});
+  const old = h[v.id] || { count: 0 };
+  h[v.id] = { id: v.id, title: v.title, channel: v.channel, thumb: v.thumb, count: old.count + 1, last: Date.now() };
+  // batasi 300 lagu supaya penyimpanan tidak penuh
+  const ids = Object.keys(h);
+  if (ids.length > 300) ids.sort((a, b) => h[a].last - h[b].last).slice(0, ids.length - 300).forEach(id => delete h[id]);
+  store.set('history', h);
+  if (activeChip === 'sering' || activeChip === 'terakhir') renderRek();
 }
 $('btnSkip').onclick = playNext;
 
@@ -199,7 +239,9 @@ async function search() {
   if ($('addKaraoke').checked && !/karaoke/i.test(q)) q += ' karaoke';
   if ($('addMale').checked && !/male key/i.test(q)) q += ' male key';
   if ($('addFemale').checked && !/female key/i.test(q)) q += ' female key';
+  showTab('hasil');
   const box = $('results');
+  box.scrollTop = 0;
   box.innerHTML = '<div class="msg">Mencari…</div>';
   const url = 'https://www.googleapis.com/youtube/v3/search?' + new URLSearchParams({
     part: 'snippet', type: 'video', videoEmbeddable: 'true', maxResults: '15', q, key: apiKey
@@ -217,16 +259,7 @@ async function search() {
         channel: decode(it.snippet.channelTitle),
         thumb: it.snippet.thumbnails.medium?.url || it.snippet.thumbnails.default.url
       };
-      const el = document.createElement('div');
-      el.className = 'item';
-      el.innerHTML = `<img alt=""><div class="info"><div class="title"></div><div class="ch"></div></div>
-        <div class="acts"><button class="primary">+ Antri</button></div>`;
-      el.querySelector('img').src = v.thumb;
-      el.querySelector('.title').textContent = v.title;
-      el.querySelector('.ch').textContent = v.channel;
-      const b = el.querySelector('button');
-      b.onclick = () => addToQueue(v, b);
-      box.appendChild(el);
+      box.appendChild(videoItem(v));
     });
   } catch (err) {
     box.innerHTML = '';
@@ -250,6 +283,164 @@ $('btnSearch').onclick = search;
 });
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
 
+// baris video dengan tombol "+ Antri"
+function videoItem(v, extra) {
+  const el = document.createElement('div');
+  el.className = 'item';
+  el.innerHTML = `<img alt=""><div class="info"><div class="title"></div><div class="ch"></div></div>
+    <div class="acts"><button class="primary">+ Antri</button></div>`;
+  el.querySelector('img').src = v.thumb;
+  el.querySelector('.title').textContent = v.title;
+  el.querySelector('.ch').textContent = extra ? v.channel + ' · ' + extra : v.channel;
+  const b = el.querySelector('button');
+  b.onclick = () => addToQueue(v, b);
+  return el;
+}
+
+// ---------- tab Hasil / Rekomendasi ----------
+function showTab(t) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('results').hidden = t !== 'hasil';
+  $('rekBox').hidden = t !== 'rek';
+  if (t === 'rek') renderRek();
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+// ---------- daftar lagu per kategori (silakan tambah/ubah sendiri) ----------
+const KATEGORI = {
+  'Pop Indo': [
+    ['Separuh Aku', 'Noah'], ['Sempurna', 'Andra and The Backbone'], ['Hati-Hati di Jalan', 'Tulus'],
+    ['Tak Ingin Usai', 'Keisya Levronka'], ['Rumah Singgah', 'Fabio Asher'], ['Cinta Sejati', 'Bunga Citra Lestari'],
+    ['Takkan Terganti', 'Marcell'], ['Bertaut', 'Nadin Amizah'], ['Asmalibrasi', 'Soegi Bornean'],
+    ['Satu-Satu', 'Idgitaf'], ['Hampa', 'Ari Lasso'], ['Aku Bukan Untukmu', 'Rossa']
+  ],
+  'Dangdut': [
+    ['Begadang', 'Rhoma Irama'], ['Terajana', 'Rhoma Irama'], ['Kereta Malam', 'Elvy Sukaesih'],
+    ['Sayang', 'Via Vallen'], ['Bojo Galak', 'Via Vallen'], ['Lagi Syantik', 'Siti Badriah'],
+    ['Pamer Bojo', 'Didi Kempot'], ['Cidro', 'Didi Kempot'], ['Ojo Dibandingke', 'Farel Prayoga'],
+    ['Alamat Palsu', 'Ayu Ting Ting'], ['Goyang Dumang', 'Cita Citata'], ['Kopi Dangdut', 'Fahmi Shahab']
+  ],
+  'Lawas': [
+    ['Kemesraan', 'Iwan Fals'], ['Panggung Sandiwara', 'God Bless'], ['Yogyakarta', 'Kla Project'],
+    ['Bintang Kehidupan', 'Nike Ardilla'], ['Kisah Kasih di Sekolah', 'Chrisye'], ['Badai Pasti Berlalu', 'Chrisye'],
+    ['Kangen', 'Dewa 19'], ['Pupus', 'Dewa 19'], ['Cinta Kan Membawamu Kembali', 'Dewa 19'],
+    ['Sephia', 'Sheila on 7'], ['Dan', 'Sheila on 7'], ['Mengejar Matahari', 'Ari Lasso']
+  ],
+  'Pop Barat': [
+    ['Perfect', 'Ed Sheeran'], ['Someone Like You', 'Adele'], ['My Heart Will Go On', 'Celine Dion'],
+    ['I Want It That Way', 'Backstreet Boys'], ['Just The Way You Are', 'Bruno Mars'], ['Count On Me', 'Bruno Mars'],
+    ['Yellow', 'Coldplay'], ['Bohemian Rhapsody', 'Queen'], ['Hotel California', 'Eagles'],
+    ["Don't Look Back in Anger", 'Oasis'], ["Sweet Child O' Mine", "Guns N' Roses"], ['Thinking Out Loud', 'Ed Sheeran']
+  ],
+  'Duet & Bareng': [
+    ['Jika', 'Melly Goeslaw Ari Lasso'], ['Shallow', 'Lady Gaga Bradley Cooper'], ['Die With A Smile', 'Lady Gaga Bruno Mars'],
+    ['Endless Love', 'Lionel Richie Diana Ross'], ['A Whole New World', 'Aladdin'], ['Kemesraan', 'Iwan Fals'],
+    ['Bendera', 'Cokelat'], ['Laskar Pelangi', 'Nidji'], ['Pelangi di Matamu', 'Jamrud'], ['Sahabat Kecil', 'Ipang']
+  ]
+};
+
+const CHIPS = ['Sering', 'Terakhir', 'Trending', ...Object.keys(KATEGORI)];
+let activeChip = store.get('rek_chip', 'sering');
+
+function renderChips() {
+  const row = $('chips');
+  row.innerHTML = '';
+  CHIPS.forEach(name => {
+    const key = name.toLowerCase();
+    const b = document.createElement('button');
+    b.className = 'chip' + (key === activeChip ? ' on' : '');
+    b.textContent = name;
+    b.onclick = () => { activeChip = key; store.set('rek_chip', key); renderChips(); renderRek(); };
+    row.appendChild(b);
+  });
+}
+
+// baris teks lagu: diketuk -> cari versi karaokenya
+function songRow(title, sub) {
+  const el = document.createElement('div');
+  el.className = 'song';
+  el.innerHTML = `<div class="st"><div class="t1"></div><div class="sa"></div></div><div class="go">Cari 🔍</div>`;
+  el.querySelector('.t1').textContent = title;
+  el.querySelector('.sa').textContent = sub || '';
+  el.onclick = () => { $('q').value = sub ? `${title} ${sub}` : title; search(); };
+  return el;
+}
+
+function msg(box, text) {
+  const m = document.createElement('div');
+  m.className = 'msg';
+  m.textContent = text;
+  box.appendChild(m);
+}
+
+function renderRek() {
+  const box = $('rekList');
+  box.innerHTML = '';
+  box.scrollTop = 0;
+  const h = store.get('history', {});
+  const list = Object.values(h);
+
+  if (activeChip === 'sering' || activeChip === 'terakhir') {
+    if (!list.length) { msg(box, 'Belum ada riwayat. Lagu yang sudah diputar akan muncul di sini.'); return; }
+    const head = document.createElement('div');
+    head.className = 'rekhead';
+    head.innerHTML = '<span></span><button style="font-size:11px;padding:4px 8px">Hapus riwayat</button>';
+    head.querySelector('span').textContent = activeChip === 'sering' ? 'Paling sering dinyanyikan' : 'Terakhir dinyanyikan';
+    head.querySelector('button').onclick = () => { if (confirm('Hapus semua riwayat?')) { store.set('history', {}); renderRek(); } };
+    box.appendChild(head);
+    list.sort(activeChip === 'sering'
+      ? (a, b) => b.count - a.count || b.last - a.last
+      : (a, b) => b.last - a.last);
+    list.slice(0, 40).forEach(v => box.appendChild(videoItem(v, activeChip === 'sering' ? v.count + '× diputar' : '')));
+    return;
+  }
+
+  if (activeChip === 'trending') { renderTrending(box); return; }
+
+  const kat = Object.keys(KATEGORI).find(k => k.toLowerCase() === activeChip);
+  if (kat) KATEGORI[kat].forEach(([t, a]) => box.appendChild(songRow(t, a)));
+}
+
+// bersihkan judul video resmi: buang (Official Video), [Lirik], | Label, dll.
+function cleanTitle(s) {
+  return s.replace(/\s*[\(\[][^\)\]]*[\)\]]/g, '')
+          .replace(/\s*[|｜].*$/, '')
+          .replace(/\s*(official|lyric|lirik|music video|mv)\b.*$/i, '')
+          .replace(/\s+/g, ' ').trim();
+}
+
+async function renderTrending(box) {
+  const cache = store.get('trending', null);
+  const SIX_HOURS = 6 * 3600 * 1000;
+  let items = cache && Date.now() - cache.t < SIX_HOURS ? cache.items : null;
+
+  if (!items) {
+    if (!apiKey) { msg(box, 'Isi API key dulu (tombol ⚙).'); return; }
+    msg(box, 'Memuat lagu trending…');
+    try {
+      const url = 'https://www.googleapis.com/youtube/v3/videos?' + new URLSearchParams({
+        part: 'snippet', chart: 'mostPopular', regionCode: 'ID', videoCategoryId: '10', maxResults: '30', key: apiKey
+      });
+      const data = await (await fetch(url)).json();
+      if (data.error) throw new Error(data.error.message);
+      items = data.items.map(it => ({ t: cleanTitle(decode(it.snippet.title)), a: decode(it.snippet.channelTitle).replace(/\s*-\s*Topic$/, '') }));
+      store.set('trending', { t: Date.now(), items });
+    } catch (err) {
+      box.innerHTML = '';
+      msg(box, 'Gagal memuat trending: ' + err.message);
+      return;
+    }
+    if (activeChip !== 'trending') return; // pengguna sudah pindah chip
+    box.innerHTML = '';
+  }
+  const head = document.createElement('div');
+  head.className = 'rekhead';
+  head.textContent = 'Musik populer di YouTube Indonesia — ketuk untuk cari versi karaoke';
+  box.appendChild(head);
+  items.forEach(({ t, a }) => box.appendChild(songRow(t, a)));
+}
+
+renderChips();
 renderQueue();
 </script>
 </body>
