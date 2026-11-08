@@ -45,7 +45,9 @@
   .song .st { flex:1; min-width:0; font-size:14px; }
   .song .sa { font-size:12px; color:var(--muted); }
   .song .go { color:var(--muted); font-size:12px; white-space:nowrap; }
-  .rekhead { display:flex; justify-content:space-between; align-items:center; padding:6px 0; color:var(--muted); font-size:12px; }
+  .fav { font-size:16px !important; padding:2px 8px !important; background:none; color:var(--muted); }
+  .fav.on { color:#ffc94d; }
+  .rekhead { gap:8px; display:flex; justify-content:space-between; align-items:center; padding:6px 0; color:var(--muted); font-size:12px; }
   #queueBox { flex:1; min-height:0; display:flex; flex-direction:column; border-top:1px solid var(--line); }
   .item { display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid #20242d; }
   .item img { width:96px; height:54px; object-fit:cover; border-radius:6px; flex-shrink:0; background:#000; }
@@ -288,12 +290,19 @@ function videoItem(v, extra) {
   const el = document.createElement('div');
   el.className = 'item';
   el.innerHTML = `<img alt=""><div class="info"><div class="title"></div><div class="ch"></div></div>
-    <div class="acts"><button class="primary">+ Antri</button></div>`;
+    <div class="acts"><button class="primary">+ Antri</button><button class="fav" title="Simpan ke Favoritku"></button></div>`;
   el.querySelector('img').src = v.thumb;
   el.querySelector('.title').textContent = v.title;
   el.querySelector('.ch').textContent = extra ? v.channel + ' · ' + extra : v.channel;
-  const b = el.querySelector('button');
+  const b = el.querySelector('.primary');
   b.onclick = () => addToQueue(v, b);
+  const f = el.querySelector('.fav');
+  const paint = on => { f.textContent = on ? '★' : '☆'; f.classList.toggle('on', on); };
+  paint(isFav(v.id));
+  f.onclick = () => {
+    paint(toggleFav(v));
+    if (activeChip === 'favoritku' && !$('rekBox').hidden) renderRek();
+  };
   return el;
 }
 
@@ -306,41 +315,20 @@ function showTab(t) {
 }
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
-// ---------- daftar lagu per kategori (silakan tambah/ubah sendiri) ----------
+// ---------- kategori otomatis dari YouTube (kata kunci bisa diubah) ----------
 const KATEGORI = {
-  'Pop Indo': [
-    ['Separuh Aku', 'Noah'], ['Sempurna', 'Andra and The Backbone'], ['Hati-Hati di Jalan', 'Tulus'],
-    ['Tak Ingin Usai', 'Keisya Levronka'], ['Rumah Singgah', 'Fabio Asher'], ['Cinta Sejati', 'Bunga Citra Lestari'],
-    ['Takkan Terganti', 'Marcell'], ['Bertaut', 'Nadin Amizah'], ['Asmalibrasi', 'Soegi Bornean'],
-    ['Satu-Satu', 'Idgitaf'], ['Hampa', 'Ari Lasso'], ['Aku Bukan Untukmu', 'Rossa']
-  ],
-  'Dangdut': [
-    ['Begadang', 'Rhoma Irama'], ['Terajana', 'Rhoma Irama'], ['Kereta Malam', 'Elvy Sukaesih'],
-    ['Sayang', 'Via Vallen'], ['Bojo Galak', 'Via Vallen'], ['Lagi Syantik', 'Siti Badriah'],
-    ['Pamer Bojo', 'Didi Kempot'], ['Cidro', 'Didi Kempot'], ['Ojo Dibandingke', 'Farel Prayoga'],
-    ['Alamat Palsu', 'Ayu Ting Ting'], ['Goyang Dumang', 'Cita Citata'], ['Kopi Dangdut', 'Fahmi Shahab']
-  ],
-  'Lawas': [
-    ['Kemesraan', 'Iwan Fals'], ['Panggung Sandiwara', 'God Bless'], ['Yogyakarta', 'Kla Project'],
-    ['Bintang Kehidupan', 'Nike Ardilla'], ['Kisah Kasih di Sekolah', 'Chrisye'], ['Badai Pasti Berlalu', 'Chrisye'],
-    ['Kangen', 'Dewa 19'], ['Pupus', 'Dewa 19'], ['Cinta Kan Membawamu Kembali', 'Dewa 19'],
-    ['Sephia', 'Sheila on 7'], ['Dan', 'Sheila on 7'], ['Mengejar Matahari', 'Ari Lasso']
-  ],
-  'Pop Barat': [
-    ['Perfect', 'Ed Sheeran'], ['Someone Like You', 'Adele'], ['My Heart Will Go On', 'Celine Dion'],
-    ['I Want It That Way', 'Backstreet Boys'], ['Just The Way You Are', 'Bruno Mars'], ['Count On Me', 'Bruno Mars'],
-    ['Yellow', 'Coldplay'], ['Bohemian Rhapsody', 'Queen'], ['Hotel California', 'Eagles'],
-    ["Don't Look Back in Anger", 'Oasis'], ["Sweet Child O' Mine", "Guns N' Roses"], ['Thinking Out Loud', 'Ed Sheeran']
-  ],
-  'Duet & Bareng': [
-    ['Jika', 'Melly Goeslaw Ari Lasso'], ['Shallow', 'Lady Gaga Bradley Cooper'], ['Die With A Smile', 'Lady Gaga Bruno Mars'],
-    ['Endless Love', 'Lionel Richie Diana Ross'], ['A Whole New World', 'Aladdin'], ['Kemesraan', 'Iwan Fals'],
-    ['Bendera', 'Cokelat'], ['Laskar Pelangi', 'Nidji'], ['Pelangi di Matamu', 'Jamrud'], ['Sahabat Kecil', 'Ipang']
-  ]
+  'Pop Indo':  'karaoke lagu pop indonesia',
+  'Dangdut':   'karaoke dangdut',
+  'Lawas':     'karaoke lagu lawas indonesia nostalgia',
+  'Pop Barat': 'karaoke english song',
+  'Duet':      'karaoke duet'
 };
+const PER_HALAMAN = 20;
+const SEHARI = 24 * 3600 * 1000;
 
-const CHIPS = ['Sering', 'Terakhir', 'Trending', ...Object.keys(KATEGORI)];
-let activeChip = store.get('rek_chip', 'sering');
+const CHIPS = ['Favoritku', 'Sering', 'Terakhir', 'Trending', ...Object.keys(KATEGORI)];
+let activeChip = store.get('rek_chip', 'favoritku');
+if (!CHIPS.some(c => c.toLowerCase() === activeChip)) activeChip = 'favoritku';
 
 function renderChips() {
   const row = $('chips');
@@ -349,13 +337,24 @@ function renderChips() {
     const key = name.toLowerCase();
     const b = document.createElement('button');
     b.className = 'chip' + (key === activeChip ? ' on' : '');
-    b.textContent = name;
+    b.textContent = name === 'Favoritku' ? '★ Favoritku' : name;
     b.onclick = () => { activeChip = key; store.set('rek_chip', key); renderChips(); renderRek(); };
     row.appendChild(b);
   });
 }
 
-// baris teks lagu: diketuk -> cari versi karaokenya
+// ---------- favorit ----------
+const getFav = () => store.get('fav', []);
+const isFav = id => getFav().some(v => v.id === id);
+function toggleFav(v) {
+  let f = getFav();
+  if (f.some(x => x.id === v.id)) f = f.filter(x => x.id !== v.id);
+  else f.unshift({ id: v.id, title: v.title, channel: v.channel, thumb: v.thumb });
+  store.set('fav', f);
+  return f.some(x => x.id === v.id);
+}
+
+// baris teks lagu (dipakai Trending): diketuk -> cari versi karaokenya
 function songRow(title, sub) {
   const el = document.createElement('div');
   el.className = 'song';
@@ -373,21 +372,39 @@ function msg(box, text) {
   box.appendChild(m);
 }
 
+function header(box, text, btnText, onBtn) {
+  const head = document.createElement('div');
+  head.className = 'rekhead';
+  head.innerHTML = '<span></span>';
+  head.querySelector('span').textContent = text;
+  if (btnText) {
+    const b = document.createElement('button');
+    b.style.cssText = 'font-size:12px;padding:5px 10px;flex-shrink:0';
+    b.textContent = btnText;
+    b.onclick = onBtn;
+    head.appendChild(b);
+  }
+  box.appendChild(head);
+}
+
 function renderRek() {
   const box = $('rekList');
   box.innerHTML = '';
   box.scrollTop = 0;
-  const h = store.get('history', {});
-  const list = Object.values(h);
+
+  if (activeChip === 'favoritku') {
+    const f = getFav();
+    if (!f.length) { msg(box, 'Belum ada favorit. Klik ☆ di lagu mana pun untuk menyimpannya di sini.'); return; }
+    header(box, f.length + ' lagu favorit');
+    f.forEach(v => box.appendChild(videoItem(v)));
+    return;
+  }
 
   if (activeChip === 'sering' || activeChip === 'terakhir') {
+    const list = Object.values(store.get('history', {}));
     if (!list.length) { msg(box, 'Belum ada riwayat. Lagu yang sudah diputar akan muncul di sini.'); return; }
-    const head = document.createElement('div');
-    head.className = 'rekhead';
-    head.innerHTML = '<span></span><button style="font-size:11px;padding:4px 8px">Hapus riwayat</button>';
-    head.querySelector('span').textContent = activeChip === 'sering' ? 'Paling sering dinyanyikan' : 'Terakhir dinyanyikan';
-    head.querySelector('button').onclick = () => { if (confirm('Hapus semua riwayat?')) { store.set('history', {}); renderRek(); } };
-    box.appendChild(head);
+    header(box, activeChip === 'sering' ? 'Paling sering dinyanyikan' : 'Terakhir dinyanyikan', 'Hapus riwayat',
+      () => { if (confirm('Hapus semua riwayat?')) { store.set('history', {}); renderRek(); } });
     list.sort(activeChip === 'sering'
       ? (a, b) => b.count - a.count || b.last - a.last
       : (a, b) => b.last - a.last);
@@ -395,10 +412,74 @@ function renderRek() {
     return;
   }
 
-  if (activeChip === 'trending') { renderTrending(box); return; }
+  if (activeChip === 'trending') { renderPaged(box, 'trending', fetchTrending, (it) => songRow(it.t, it.a),
+    'Musik populer YouTube Indonesia — ketuk untuk cari versi karaoke'); return; }
 
   const kat = Object.keys(KATEGORI).find(k => k.toLowerCase() === activeChip);
-  if (kat) KATEGORI[kat].forEach(([t, a]) => box.appendChild(songRow(t, a)));
+  if (kat) renderPaged(box, 'kat_' + activeChip + keySuffix(), tok => fetchKategori(kat, tok), v => videoItem(v),
+    kat + (keySuffix() ? ' ·' + keySuffix() : ''));
+}
+
+// male/female key ikut berlaku di kategori
+function keySuffix() {
+  if ($('addMale').checked) return ' male key';
+  if ($('addFemale').checked) return ' female key';
+  return '';
+}
+
+// ---------- pemuat berhalaman: 20 teratas + tombol "Cari yang lain" ----------
+async function renderPaged(box, cacheKey, fetchPage, makeRow, title, forceNext) {
+  const chipAtStart = activeChip;
+  let cache = store.get('rek_' + cacheKey, null);
+  const stale = !cache || Date.now() - cache.t > SEHARI;
+
+  if (stale || forceNext) {
+    if (!apiKey) { msg(box, 'Isi API key dulu (tombol ⚙).'); return; }
+    box.innerHTML = '';
+    msg(box, 'Memuat…');
+    try {
+      // "cari yang lain" = halaman berikutnya; kalau sudah habis, mulai lagi dari awal
+      const token = forceNext && cache ? (cache.next || undefined) : undefined;
+      const page = await fetchPage(token);
+      cache = { t: Date.now(), items: page.items, next: page.next, hal: token ? (cache.hal || 1) + 1 : 1 };
+      store.set('rek_' + cacheKey, cache);
+    } catch (err) {
+      box.innerHTML = '';
+      msg(box, 'Gagal memuat: ' + err.message);
+      return;
+    }
+    if (activeChip !== chipAtStart) return; // pengguna sudah pindah tab
+  }
+
+  box.innerHTML = '';
+  header(box, `${title} — hal. ${cache.hal || 1}`, '🔄 Cari yang lain',
+    () => renderPaged(box, cacheKey, fetchPage, makeRow, title, true));
+  if (!cache.items.length) msg(box, 'Tidak ada hasil.');
+  cache.items.forEach(it => box.appendChild(makeRow(it)));
+  box.scrollTop = 0;
+}
+
+async function ytGet(endpoint, params) {
+  const url = `https://www.googleapis.com/youtube/v3/${endpoint}?` + new URLSearchParams({ ...params, key: apiKey });
+  const data = await (await fetch(url)).json();
+  if (data.error) throw new Error(data.error.message);
+  return data;
+}
+
+async function fetchKategori(kat, pageToken) {
+  const p = { part: 'snippet', type: 'video', videoEmbeddable: 'true', maxResults: String(PER_HALAMAN),
+              q: KATEGORI[kat] + keySuffix() };
+  if (pageToken) p.pageToken = pageToken;
+  const data = await ytGet('search', p);
+  return {
+    next: data.nextPageToken,
+    items: data.items.map(it => ({
+      id: it.id.videoId,
+      title: decode(it.snippet.title),
+      channel: decode(it.snippet.channelTitle),
+      thumb: it.snippet.thumbnails.medium?.url || it.snippet.thumbnails.default.url
+    }))
+  };
 }
 
 // bersihkan judul video resmi: buang (Official Video), [Lirik], | Label, dll.
@@ -409,37 +490,20 @@ function cleanTitle(s) {
           .replace(/\s+/g, ' ').trim();
 }
 
-async function renderTrending(box) {
-  const cache = store.get('trending', null);
-  const SIX_HOURS = 6 * 3600 * 1000;
-  let items = cache && Date.now() - cache.t < SIX_HOURS ? cache.items : null;
-
-  if (!items) {
-    if (!apiKey) { msg(box, 'Isi API key dulu (tombol ⚙).'); return; }
-    msg(box, 'Memuat lagu trending…');
-    try {
-      const url = 'https://www.googleapis.com/youtube/v3/videos?' + new URLSearchParams({
-        part: 'snippet', chart: 'mostPopular', regionCode: 'ID', videoCategoryId: '10', maxResults: '30', key: apiKey
-      });
-      const data = await (await fetch(url)).json();
-      if (data.error) throw new Error(data.error.message);
-      items = data.items.map(it => ({ t: cleanTitle(decode(it.snippet.title)), a: decode(it.snippet.channelTitle).replace(/\s*-\s*Topic$/, '') }));
-      store.set('trending', { t: Date.now(), items });
-    } catch (err) {
-      box.innerHTML = '';
-      msg(box, 'Gagal memuat trending: ' + err.message);
-      return;
-    }
-    if (activeChip !== 'trending') return; // pengguna sudah pindah chip
-    box.innerHTML = '';
-  }
-  const head = document.createElement('div');
-  head.className = 'rekhead';
-  head.textContent = 'Musik populer di YouTube Indonesia — ketuk untuk cari versi karaoke';
-  box.appendChild(head);
-  items.forEach(({ t, a }) => box.appendChild(songRow(t, a)));
+async function fetchTrending(pageToken) {
+  const p = { part: 'snippet', chart: 'mostPopular', regionCode: 'ID', videoCategoryId: '10', maxResults: String(PER_HALAMAN) };
+  if (pageToken) p.pageToken = pageToken;
+  const data = await ytGet('videos', p);
+  return {
+    next: data.nextPageToken,
+    items: data.items.map(it => ({ t: cleanTitle(decode(it.snippet.title)), a: decode(it.snippet.channelTitle).replace(/\s*-\s*Topic$/, '') }))
+  };
 }
 
+// kategori dimuat ulang kalau centang male/female berubah
+['addMale', 'addFemale'].forEach(id => $(id).addEventListener('change', () => {
+  if (!$('rekBox').hidden && Object.keys(KATEGORI).some(k => k.toLowerCase() === activeChip)) renderRek();
+}));
 renderChips();
 renderQueue();
 </script>
