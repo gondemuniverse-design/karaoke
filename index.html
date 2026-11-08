@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GONDEM Karaoke</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23ff4d6d'/><rect x='24' y='9' width='16' height='28' rx='8' fill='white'/><path d='M16 29a16 16 0 0 0 32 0' fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round'/><path d='M32 45v9M23 55h18' stroke='white' stroke-width='4.5' stroke-linecap='round'/></svg>">
+<meta name="theme-color" content="#0f1115">
 <style>
   :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --text:#e8eaf0; --muted:#8b93a7; --accent:#ff4d6d; }
   * { box-sizing:border-box; }
@@ -99,7 +101,13 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
 
-let apiKey = store.get('yt_api_key', '');
+// ==== ISI API KEY DI SINI (di antara tanda kutip) ====
+const DEFAULT_KEY = 'AIzaSyDySVncbgeFOgwvjJmpBw8ttcYliEPRR3c';
+// =====================================================
+const builtinKey = DEFAULT_KEY.startsWith('ISI_') ? '' : DEFAULT_KEY;
+
+// key yang diisi lewat tombol ⚙ di perangkat tertentu tetap diutamakan
+let apiKey = store.get('yt_api_key', '') || builtinKey;
 let queue = store.get('queue', []);       // [{id,title,channel,thumb}]
 let current = null;
 let player = null, playerReady = false;
@@ -109,7 +117,7 @@ const decode = s => { const t = document.createElement('textarea'); t.innerHTML 
 
 function askKey() {
   const k = prompt('Masukkan YouTube Data API key:', apiKey || '');
-  if (k !== null) { apiKey = k.trim(); store.set('yt_api_key', apiKey); }
+  if (k !== null) { store.set('yt_api_key', k.trim()); apiKey = k.trim() || builtinKey; }
 }
 $('btnKey').onclick = askKey;
 if (!apiKey) setTimeout(askKey, 300);
