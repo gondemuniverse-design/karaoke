@@ -10,12 +10,14 @@
   :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --text:#e8eaf0; --muted:#8b93a7; --accent:#ff4d6d; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,Segoe UI,Roboto,sans-serif; height:100vh; overflow:hidden; }
-  .app { display:grid; grid-template-columns:1fr 400px; height:100vh; }
+  .app { display:grid; grid-template-columns:minmax(0,1fr) 400px; grid-template-rows:auto minmax(0,1fr); height:100vh; }
   .stage { display:flex; flex-direction:column; min-width:0; }
   #playerWrap { flex:1; background:#000; position:relative; }
   #player { position:absolute; inset:0; width:100%; height:100%; }
   #idle { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:22px; text-align:center; padding:20px; }
-  .nowbar { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--panel); border-top:1px solid var(--line); }
+  .nowbar { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line); grid-column:1 / -1; }
+  .nowbar .t { min-width:0; }
+  #nowTitle { font-weight:600; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .nowbar .t { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .nowbar .lbl { color:var(--muted); font-size:12px; }
   aside { background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
@@ -63,15 +65,14 @@
   /* ---------- HP / layar sempit: video di atas, panel di bawah ---------- */
   @media (max-width: 900px) {
     body { height:100dvh; }
-    .app { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); height:100dvh; }
+    .app { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto minmax(0,1fr); height:100dvh; }
     aside { min-width:0; }
     #leftPanel { flex:2; }
     .stage { flex:none; }
     #playerWrap { flex:none; width:100%; aspect-ratio:16/9; }
     #idle { font-size:15px; }
     .nowbar { padding:8px 12px; }
-    .nowbar .lbl { display:none; }
-    .nowbar .t { font-size:14px; }
+    #nowTitle { font-size:14px; }
     .nowbar button { padding:8px 10px; font-size:13px; }
     aside { border-left:0; min-height:0; }
     .sec { padding:10px 12px; }
@@ -84,14 +85,14 @@
 </head>
 <body>
 <div class="app">
+  <div class="nowbar">
+    <div class="t"><div class="lbl">🎤 Sedang diputar</div><div id="nowTitle">—</div></div>
+    <button id="btnSkip" class="primary">Lagu berikutnya ⏭</button>
+  </div>
   <div class="stage">
     <div id="playerWrap">
       <div id="player"></div>
       <div id="idle"><span>Cari lagu atau pilih dari ⭐ Rekomendasi, lalu klik <b>+ Antri</b> untuk mulai 🎤</span></div>
-    </div>
-    <div class="nowbar">
-      <div class="t"><div class="lbl">Sedang diputar</div><div id="nowTitle">—</div></div>
-      <button id="btnSkip" class="primary">Lagu berikutnya ⏭</button>
     </div>
   </div>
 
