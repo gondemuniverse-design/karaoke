@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GONDEM Karaoke</title>
+<style>
+  :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --text:#e8eaf0; --muted:#8b93a7; --accent:#ff4d6d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,Segoe UI,Roboto,sans-serif; height:100vh; overflow:hidden; }
+  .app { display:grid; grid-template-columns:1fr 400px; height:100vh; }
+  .stage { display:flex; flex-direction:column; min-width:0; }
+  #playerWrap { flex:1; background:#000; position:relative; }
+  #player { position:absolute; inset:0; width:100%; height:100%; }
+  #idle { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:22px; text-align:center; padding:20px; }
+  .nowbar { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--panel); border-top:1px solid var(--line); }
+  .nowbar .t { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nowbar .lbl { color:var(--muted); font-size:12px; }
+  aside { background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+  .sec { padding:12px; border-bottom:1px solid var(--line); }
+  .row { display:flex; gap:8px; }
+  input[type=text] { flex:1; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:#0f1115; color:var(--text); font-size:15px; }
+  button { padding:8px 12px; border-radius:8px; border:0; background:#2a2f3a; color:var(--text); cursor:pointer; font-size:14px; }
+  button:hover { filter:brightness(1.2); }
+  button.primary { background:var(--accent); color:#fff; }
+  label.chk { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; margin-top:8px; }
+  h3 { margin:0; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
+  .list { overflow-y:auto; padding:4px 12px 12px; }
+  #results { flex:1.3; min-height:0; }
+  #queueBox { flex:1; min-height:0; display:flex; flex-direction:column; border-top:1px solid var(--line); }
+  .item { display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid #20242d; }
+  .item img { width:96px; height:54px; object-fit:cover; border-radius:6px; flex-shrink:0; background:#000; }
+  .item .info { flex:1; min-width:0; }
+  .item .title { font-size:14px; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .item .ch { font-size:12px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item .acts { display:flex; flex-direction:column; gap:4px; }
+  .item .acts button { padding:4px 8px; font-size:12px; }
+  .num { color:var(--accent); font-weight:700; width:20px; text-align:center; }
+  .msg { color:var(--muted); font-size:13px; padding:10px 0; }
+  .added { background:#1f3a2a !important; }
+
+  /* ---------- HP / layar sempit: video di atas, panel di bawah ---------- */
+  @media (max-width: 900px) {
+    body { height:100dvh; }
+    .app { grid-template-columns:1fr; grid-template-rows:auto 1fr; height:100dvh; }
+    .stage { flex:none; }
+    #playerWrap { flex:none; width:100%; aspect-ratio:16/9; }
+    #idle { font-size:15px; }
+    .nowbar { padding:8px 12px; }
+    .nowbar .lbl { display:none; }
+    .nowbar .t { font-size:14px; }
+    .nowbar button { padding:8px 10px; font-size:13px; }
+    aside { border-left:0; min-height:0; }
+    .sec { padding:10px 12px; }
+    input[type=text] { font-size:16px; } /* cegah auto-zoom di iPhone */
+    .item img { width:80px; height:45px; }
+    .item .title { font-size:13px; }
+    .item .acts button { padding:8px 10px; font-size:13px; } /* lebih mudah disentuh */
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage">
+    <div id="playerWrap">
+      <div id="player"></div>
+      <div id="idle">Cari lagu di panel kanan, lalu klik <b>&nbsp;+ Antri&nbsp;</b> untuk mulai 🎤</div>
+    </div>
+    <div class="nowbar">
+      <div class="t"><div class="lbl">Sedang diputar</div><div id="nowTitle">—</div></div>
+      <button id="btnSkip" class="primary">Lagu berikutnya ⏭</button>
+    </div>
+  </div>
+
+  <aside>
+    <div class="sec">
+      <div class="row">
+        <input id="q" type="text" placeholder="Cari judul / penyanyi…" autocomplete="off">
+        <button id="btnSearch" class="primary">Cari</button>
+        <button id="btnKey" title="Ganti API key">⚙</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="addKaraoke" checked> Tambahkan kata "karaoke" otomatis</label>
+    </div>
+    <div id="results" class="list"><div class="msg">Hasil pencarian muncul di sini.</div></div>
+    <div id="queueBox">
+      <div class="sec" style="border-bottom:0;padding-bottom:4px">
+        <h3><span>Antrian (<span id="qCount">0</span>)</span><button id="btnClear" style="font-size:11px;padding:4px 8px">Kosongkan</button></h3>
+      </div>
+      <div id="queue" class="list"></div>
+    </div>
+  </aside>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+// ---------- storage (aman jika localStorage tidak tersedia) ----------
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+
+let apiKey = store.get('yt_api_key', '');
+let queue = store.get('queue', []);       // [{id,title,channel,thumb}]
+let current = null;
+let player = null, playerReady = false;
+
+const $ = id => document.getElementById(id);
+const decode = s => { const t = document.createElement('textarea'); t.innerHTML = s; return t.value; };
+
+function askKey() {
+  const k = prompt('Masukkan YouTube Data API key:', apiKey || '');
+  if (k !== null) { apiKey = k.trim(); store.set('yt_api_key', apiKey); }
+}
+$('btnKey').onclick = askKey;
+if (!apiKey) setTimeout(askKey, 300);
+
+// ---------- player ----------
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player('player', {
+    width: '100%', height: '100%',
+    playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+    events: {
+      onReady: () => { playerReady = true; if (queue.length) playNext(); },
+      onStateChange: e => { if (e.data === YT.PlayerState.ENDED) playNext(); },
+      onError: e => {   // 101/150 = embed dimatikan pemilik video, 100 = tidak ada
+        console.warn('YT error', e.data, current && current.title);
+        playNext();
+      }
+    }
+  });
+}
+
+function playNext() {
+  if (!playerReady) return;
+  current = queue.shift() || null;
+  saveQueue(); renderQueue();
+  if (!current) {
+    player.stopVideo();
+    $('idle').style.display = 'flex';
+    $('nowTitle').textContent = '—';
+    return;
+  }
+  $('idle').style.display = 'none';
+  $('nowTitle').textContent = current.title;
+  player.loadVideoById(current.id);
+}
+$('btnSkip').onclick = playNext;
+
+// ---------- antrian ----------
+function saveQueue() { store.set('queue', queue); }
+
+function addToQueue(v, btn) {
+  queue.push(v); saveQueue(); renderQueue();
+  if (btn) { btn.textContent = '✓'; btn.closest('.item').classList.add('added'); }
+  if (!current && playerReady) playNext();
+}
+
+function renderQueue() {
+  $('qCount').textContent = queue.length;
+  const box = $('queue');
+  box.innerHTML = '';
+  if (!queue.length) { box.innerHTML = '<div class="msg">Antrian kosong.</div>'; return; }
+  queue.forEach((v, i) => {
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.innerHTML = `<div class="num">${i + 1}</div><img alt=""><div class="info"><div class="title"></div><div class="ch"></div></div>
+      <div class="acts"><button data-a="up" title="Naikkan">▲</button><button data-a="del" title="Hapus">✕</button></div>`;
+    el.querySelector('img').src = v.thumb;
+    el.querySelector('.title').textContent = v.title;
+    el.querySelector('.ch').textContent = v.channel;
+    el.querySelector('[data-a=up]').onclick = () => { if (i > 0) { [queue[i - 1], queue[i]] = [queue[i], queue[i - 1]]; saveQueue(); renderQueue(); } };
+    el.querySelector('[data-a=del]').onclick = () => { queue.splice(i, 1); saveQueue(); renderQueue(); };
+    box.appendChild(el);
+  });
+}
+$('btnClear').onclick = () => { if (confirm('Kosongkan antrian?')) { queue = []; saveQueue(); renderQueue(); } };
+
+// ---------- pencarian ----------
+async function search() {
+  const raw = $('q').value.trim();
+  if (!raw) return;
+  $('q').blur(); // tutup keyboard HP supaya hasil terlihat
+  if (!apiKey) { askKey(); if (!apiKey) return; }
+  const q = $('addKaraoke').checked && !/karaoke/i.test(raw) ? raw + ' karaoke' : raw;
+  const box = $('results');
+  box.innerHTML = '<div class="msg">Mencari…</div>';
+  const url = 'https://www.googleapis.com/youtube/v3/search?' + new URLSearchParams({
+    part: 'snippet', type: 'video', videoEmbeddable: 'true', maxResults: '15', q, key: apiKey
+  });
+  try {
+    const r = await fetch(url);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error.message);
+    box.innerHTML = '';
+    if (!data.items.length) { box.innerHTML = '<div class="msg">Tidak ada hasil.</div>'; return; }
+    data.items.forEach(it => {
+      const v = {
+        id: it.id.videoId,
+        title: decode(it.snippet.title),
+        channel: decode(it.snippet.channelTitle),
+        thumb: it.snippet.thumbnails.medium?.url || it.snippet.thumbnails.default.url
+      };
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.innerHTML = `<img alt=""><div class="info"><div class="title"></div><div class="ch"></div></div>
+        <div class="acts"><button class="primary">+ Antri</button></div>`;
+      el.querySelector('img').src = v.thumb;
+      el.querySelector('.title').textContent = v.title;
+      el.querySelector('.ch').textContent = v.channel;
+      const b = el.querySelector('button');
+      b.onclick = () => addToQueue(v, b);
+      box.appendChild(el);
+    });
+  } catch (err) {
+    box.innerHTML = '';
+    const m = document.createElement('div');
+    m.className = 'msg';
+    m.textContent = 'Gagal mencari: ' + err.message;
+    box.appendChild(m);
+  }
+}
+$('btnSearch').onclick = search;
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+
+renderQueue();
+</script>
+</body>
+</html>
