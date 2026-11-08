@@ -25,7 +25,9 @@
   button { padding:8px 12px; border-radius:8px; border:0; background:#2a2f3a; color:var(--text); cursor:pointer; font-size:14px; }
   button:hover { filter:brightness(1.2); }
   button.primary { background:var(--accent); color:#fff; }
-  label.chk { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; margin-top:8px; }
+  .chks { display:flex; flex-wrap:wrap; gap:4px 16px; margin-top:8px; }
+  label.chk { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; cursor:pointer; user-select:none; }
+  label.chk input { width:16px; height:16px; accent-color:var(--accent); }
   h3 { margin:0; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
   .list { overflow-y:auto; padding:4px 12px 12px; }
   #results { flex:1.3; min-height:0; }
@@ -81,7 +83,11 @@
         <button id="btnSearch" class="primary">Cari</button>
         <button id="btnKey" title="Ganti API key">⚙</button>
       </div>
-      <label class="chk"><input type="checkbox" id="addKaraoke" checked> Tambahkan kata "karaoke" otomatis</label>
+      <div class="chks">
+        <label class="chk"><input type="checkbox" id="addKaraoke" checked> karaoke</label>
+        <label class="chk"><input type="checkbox" id="addMale"> male key</label>
+        <label class="chk"><input type="checkbox" id="addFemale"> female key</label>
+      </div>
     </div>
     <div id="results" class="list"><div class="msg">Hasil pencarian muncul di sini.</div></div>
     <div id="queueBox">
@@ -189,7 +195,10 @@ async function search() {
   if (!raw) return;
   $('q').blur(); // tutup keyboard HP supaya hasil terlihat
   if (!apiKey) { askKey(); if (!apiKey) return; }
-  const q = $('addKaraoke').checked && !/karaoke/i.test(raw) ? raw + ' karaoke' : raw;
+  let q = raw;
+  if ($('addKaraoke').checked && !/karaoke/i.test(q)) q += ' karaoke';
+  if ($('addMale').checked && !/male key/i.test(q)) q += ' male key';
+  if ($('addFemale').checked && !/female key/i.test(q)) q += ' female key';
   const box = $('results');
   box.innerHTML = '<div class="msg">Mencari…</div>';
   const url = 'https://www.googleapis.com/youtube/v3/search?' + new URLSearchParams({
@@ -228,6 +237,17 @@ async function search() {
   }
 }
 $('btnSearch').onclick = search;
+
+// pilihan centang diingat; male & female tidak bisa dicentang bersamaan
+['addKaraoke', 'addMale', 'addFemale'].forEach(id => {
+  const saved = store.get('chk_' + id, null);
+  if (saved !== null) $(id).checked = saved;
+  $(id).addEventListener('change', () => {
+    if ($(id).checked && id === 'addMale') $('addFemale').checked = false;
+    if ($(id).checked && id === 'addFemale') $('addMale').checked = false;
+    ['addKaraoke', 'addMale', 'addFemale'].forEach(x => store.set('chk_' + x, $(x).checked));
+  });
+});
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
 
 renderQueue();
